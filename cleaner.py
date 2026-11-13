@@ -70,11 +70,23 @@ def clean_inbox():
         # 2. Borrar códigos OTP y de verificación viejos (más de 3 días)
         {"query": 'subject:(OTP OR "código de verificación" OR "verification code" OR "two-factor" OR "autenticación") older_than:3d', "action": "trash"},
         
-        # 3. Organizar correos de bancos/finanzas en una carpeta "Finanzas"
-        {"query": 'from:(banco OR bbva OR chase OR citibanamex OR santander OR amex OR paypal OR stripe OR fidelity) -category:promotions', "action": "label", "label": "Finanzas"},
+        # 3. Organizar correos de bancos/finanzas/estados de cuenta en una carpeta "Finanzas"
+        {"query": 'from:(banco OR bbva OR chase OR citibanamex OR santander OR amex OR paypal OR stripe OR fidelity OR statement) -category:promotions', "action": "label", "label": "Finanzas"},
         
-        # 4. Organizar boletines/newsletters en una carpeta "Lectura"
-        {"query": 'subject:(newsletter OR boletín OR digest OR weekly OR monthly) -category:promotions', "action": "label", "label": "Lectura"}
+        # 4. Organizar boletines/newsletters reales en "Lectura" (excluyendo finanzas)
+        {"query": '(subject:(newsletter OR boletín OR digest OR weekly OR monthly OR read) OR from:(service95)) -statement -banco -category:promotions', "action": "label", "label": "Lectura"},
+        
+        # 5. Organizar confirmaciones de viajes (vuelos, hoteles, Uber, etc.) en "Viajes"
+        {"query": 'subject:(vuelo OR flight OR hotel OR reserva OR booking OR itinerary OR uber OR lyft OR bus) -category:promotions', "action": "label", "label": "Viajes"},
+        
+        # 6. Organizar compras y paquetería en "Compras"
+        {"query": 'subject:(pedido OR order OR shipment OR package OR paquete OR amazon OR mercadolibre OR envío) -category:promotions', "action": "label", "label": "Compras"},
+        
+        # 7. Organizar facturas de servicios del hogar / streaming en "Servicios"
+        {"query": 'subject:(recibo OR factura OR bill OR statement OR netflix OR spotify OR cfe OR izzi OR telmex) -category:promotions', "action": "label", "label": "Servicios"},
+        
+        # 8. Organizar boletos de conciertos, eventos y taquillas en "Eventos"
+        {"query": 'subject:(ticket OR boletos OR entrada OR concierto OR concert OR eventbrite OR ticketmaster OR show) -category:promotions', "action": "label", "label": "Eventos"}
     ]
 
     for rule in rules:
