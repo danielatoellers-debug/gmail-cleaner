@@ -9,9 +9,6 @@ def get_gmail_service():
     refresh_token = os.environ.get("GMAIL_REFRESH_TOKEN")
     token = os.environ.get("GMAIL_TOKEN")
 
-    if not all([client_id, client_secret, refresh_token]):
-        raise ValueError("❌ Faltan secretos de GitHub configurados (GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN).")
-
     creds = Credentials(
         token=token,
         refresh_token=refresh_token,
@@ -28,82 +25,63 @@ def get_or_create_label(service, label_name):
         if label['name'].lower() == label_name.lower():
             return label['id']
     
-    print(f"🏷️ Creando nueva etiqueta en tu Gmail: {label_name}")
+    print(f"🏷️ Creando etiqueta: {label_name}")
     label_object = {'name': label_name, 'labelListVisibility': 'labelShow', 'messageListVisibility': 'show'}
     created_label = service.users().labels().create(userId='me', body=label_object).execute()
     return created_label['id']
 
-def process_query(service, query, action, target_label=None):
-    full_query = f"in:inbox {query}"
-    print(f"🔍 Buscando en el Inbox -> [{full_query}]")
+def clean_inbox():
+    print("🚀 Conectando a Gmail...")
+    service = get_gmail_service()
     
-    response = service.users().messages().list(userId='me', q=full_query).execute()
-    messages = response.get('messages', [])
+    # 1. Vamos a listar los primeros 10 mensajes actuales del Inbox para probar la conexión real
+    print("\n--- DIAGNÓSTICO DEL INBOX ---")
+    results = service.users().messages().list(userId='me', q="in:inbox", maxResults=10).execute()
+    messages = results.get('messages', [])
     
     if not messages:
-        print("   ↳ Sin coincidencias en el Inbox.")
-        return
+        print("⚠️ El script no encontró ningún mensaje en el Inbox.")
+    else:
+        print(f"✅ Se leyeron {len(messages)} mensajes del Inbox correctamente.")
+        for msg in messages:
+            msg_detail = service.users().messages().get(userId='me', id=msg['id'], format='metadata', metadataHeaders=['Subject', 'From']).execute()
+            headers = msg_detail.get('payload', {}).get('headers', [])
+            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'Sin asunto')
+            sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconocido')
+            print(f"   - De: {sender} | Asunto: {subject}")
 
-    msg_ids = [msg['id'] for msg in messages]
-    print(f"   ↳ ¡Encontrados {len(msg_ids)} mensajes!")
-
-    if action == 'trash':
-        service.users().messages().batchDelete(userId='me', body={'ids': msg_ids}).execute()
-        print("   ↳ 🗑️ Mensajes enviados a la papelera.")
+    print("\n--- APLICANDO REGLAS ---")
     
-    elif action == 'label' and target_label:
-        label_id = get_or_create_label(service, target_label)
-        service.users().messages().batchModify(
-            userId='me',
-            body={'ids': msg_ids, 'addLabelIds': [label_id], 'removeLabelIds': ['INBOX']}
-        ).execute()
-        print(f"   ↳ ✨ Mensajes etiquetados como '{target_label}' y archivados del Inbox.")
-
-def clean_inbox():
-    print("🚀 Conectando con la API de Gmail...")
-    service = get_gmail_service()
-    print("✅ Conexión establecida con éxito.\n")
-    
+    # Reglas simplificadas para probar etiquetas directas
     rules = [
-        # 1. Limpiezas de correos antiguos
-        {"query": "category:promotions older_than:30d", "action": "trash"},
-        {"query": "from:flights older_than:10d", "action": "trash"},
-        {"query": 'subject:(OTP OR "código de verificación" OR verification) older_than:3d', "action": "trash"},
-        
-        # 2. FINANZAS
-        {"query": "BBVA", "action": "label", "label": "Finanzas"},
-        {"query": "Wise", "action": "label", "label": "Finanzas"},
-        {"query": "Mazda Financial", "action": "label", "label": "Finanzas"},
-        {"query": "Chase", "action": "label", "label": "Finanzas"},
-        {"query": "statement", "action": "label", "label": "Finanzas"},
-        {"query": "financiamiento", "action": "label", "label": "Finanzas"},
-        
-        # 3. LECTURA
-        {"query": "Espresso Matutino", "action": "label", "label": "Lectura"},
-        {"query": "Service95", "action": "label", "label": "Lectura"},
-        {"query": "newsletter", "action": "label", "label": "Lectura"},
-        
-        # 4. VIAJES
-        {"query": "Aeroméxico", "action": "label", "label": "Viajes"},
-        {"query": "SpotHero", "action": "label", "label": "Viajes"},
-        
-        # 5. COMPRAS
-        {"query": "Factor75", "action": "label", "label": "Compras"},
-        {"query": "Amazon", "action": "label", "label": "Compras"},
-        {"query": "MercadoLibre", "action": "label", "label": "Compras"},
-        
-        # 6. EVENTOS
-        {"query": "ticketmaster", "action": "label", "label": "Eventos"}
+        {"query": "BBVA", "label": "Finanzas"},
+        {"query": "Wise", "label": "Finanzas"},
+        {"query": "Mazda", "label": "Finanzas"},
+        {"query": "Espresso Matutino", "label": "Lectura"},
+        {"query": "Factor75", "label": "Compras"},
+        {"query": "Aeroméxico", "label": "Viajes"}
     ]
 
     for rule in rules:
-        try:
-            if rule["action"] == "trash":
-                process_query(service, rule["query"], "trash")
-            elif rule["action"] == "label":
-                process_query(service, rule["query"], "label", rule["label"])
-        except Exception as e:
-            print(f"❌ Error al procesar la regla {rule}: {e}")
+        q = f"in:inbox {rule['query']}"
+        print(f"Buscando: [{q}]")
+        res = service.users().messages().list(userId='me', q=q).execute()
+        msgs = res.get('messages', [])
+        
+        if msgs:
+            msg_ids = [m['id'] for m in msgs]
+            print(f" -> ¡Encontrados {len(msg_ids)} mensajes para '{rule['query']}'!")
+            try:
+                label_id = get_or_create_label(service, rule['label'])
+                service.users().messages().batchModify(
+                    userId='me',
+                    body={'ids': msg_ids, 'addLabelIds': [label_id], 'removeLabelIds': ['INBOX']}
+                ).execute( )
+                print(f" -> ✨ ¡Movidos exitosamente a '{rule['label']}'!")
+            except Exception as e:
+                print(f" ❌ ERROR al modificar mensajes (¿Faltan permisos de escritura en el token?): {e}")
+        else:
+            print(" -> Sin coincidencias.")
 
 if __name__ == '__main__':
     clean_inbox()
