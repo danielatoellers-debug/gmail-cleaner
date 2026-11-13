@@ -60,30 +60,34 @@ def process_query(service, query, action, target_label=None):
 def clean_inbox():
     service = get_gmail_service()
     
-    # Reglas completas y actualizadas de organización automática:
+    # Reglas directas y efectivas para forzar la categorización:
     rules = [
-        # 1. Borrar promociones de más de 30 días
+        # 1. Limpieza de promociones antiguas (> 30 días)
         {"query": "category:promotions older_than:30d", "action": "trash"},
         
-        # 2. Borrar alertas de Google Flights viejas (más de 10 días)
-        {"query": 'from:(google flights OR "google.com/travel") older_than:10d', "action": "trash"},
+        # 2. Limpieza de Google Flights antiguos (> 10 días)
+        {"query": 'from:flights older_than:10d', "action": "trash"},
         
-        # 3. Borrar códigos OTP y de verificación de seguridad viejos (más de 3 días)
-        {"query": 'subject:(OTP OR "código de verificación" OR "verification code" OR "two-factor" OR "autenticación" OR "verify your email" OR "password requested") older_than:3d', "action": "trash"},
+        # 3. Limpieza de códigos OTP y verificación antiguos (> 3 días)
+        {"query": 'subject:(OTP OR "código de verificación" OR "verification code" OR verification) older_than:3d', "action": "trash"},
         
-        # 4. Finanzas y Bancos (BBVA, Chase, Wise, Mazda Financial, estados de cuenta, transferencias)
-        {"query": 'from:(banco OR bbva OR chase OR citibanamex OR santander OR amex OR paypal OR stripe OR fidelity OR wise OR "mazda financial") OR subject:(financiamiento OR préstamo OR credit OR statement OR transfer OR payment) -category:promotions', "action": "label", "label": "Finanzas"},
+        # 4. FINANZAS (Bancos, estados de cuenta, transferencias)
+        {"query": 'from:(BBVA OR Chase OR Citibanamex OR Santander OR Amex OR PayPal OR Stripe OR Fidelity OR Wise OR "Mazda Financial") -category:promotions', "action": "label", "label": "Finanzas"},
+        {"query": 'subject:(financiamiento OR préstamo OR credit OR statement OR transfer OR payment) -category:promotions', "action": "label", "label": "Finanzas"},
         
-        # 5. Lectura y Boletines (Espresso Matutino, Service95, Vanity Fair, newsletters)
-        {"query": '(subject:(newsletter OR boletín OR digest OR weekly OR monthly OR read OR "espresso matutino" OR redemption) OR from:(service95 OR "espresso matutino")) -statement -banco -category:promotions', "action": "label", "label": "Lectura"},
+        # 5. LECTURA (Boletines, Espresso Matutino, Service95, Vanity Fair)
+        {"query": 'from:(Service95 OR "Espresso Matutino") -category:promotions', "action": "label", "label": "Lectura"},
+        {"query": 'subject:(newsletter OR boletín OR digest OR weekly OR monthly OR redemption) -statement -banco -category:promotions', "action": "label", "label": "Lectura"},
         
-        # 6. Viajes y Movilidad (Aeroméxico, SpotHero, vuelos, hoteles, Uber, etc.)
-        {"query": 'from:(aeromexico OR vuela OR volaris OR viva OR spothero) OR subject:(vuelo OR flight OR hotel OR reserva OR booking OR itinerary OR uber OR lyft OR bus OR maleta OR viaje OR parking) -category:promotions', "action": "label", "label": "Viajes"},
+        # 6. VIAJES (Aeroméxico, Volaris, SpotHero, reservas)
+        {"query": 'from:(Aeroméxico OR Volaris OR Viva OR SpotHero) -category:promotions', "action": "label", "label": "Viajes"},
+        {"query": 'subject:(vuelo OR flight OR hotel OR reserva OR booking OR itinerary OR uber OR lyft OR bus OR parking) -category:promotions', "action": "label", "label": "Viajes"},
         
-        # 7. Compras y Suscripciones (Factor75, Amazon, MercadoLibre, paquetes)
-        {"query": 'from:(factor75 OR amazon OR mercadolibre) OR subject:(pedido OR order OR shipment OR package OR paquete OR box OR envío) -category:promotions', "action": "label", "label": "Compras"},
+        # 7. COMPRAS (Factor75, Amazon, MercadoLibre)
+        {"query": 'from:(Factor75 OR Amazon OR MercadoLibre) -category:promotions', "action": "label", "label": "Compras"},
+        {"query": 'subject:(pedido OR order OR shipment OR package OR paquete OR box OR envío) -category:promotions', "action": "label", "label": "Compras"},
         
-        # 8. Eventos y Conciertos
+        # 8. EVENTOS (Conciertos, boletos)
         {"query": 'subject:(ticket OR boletos OR entrada OR concierto OR concert OR eventbrite OR ticketmaster OR show) -category:promotions', "action": "label", "label": "Eventos"}
     ]
 
