@@ -30,58 +30,75 @@ def get_or_create_label(service, label_name):
     created_label = service.users().labels().create(userId='me', body=label_object).execute()
     return created_label['id']
 
+def process_query(service, query, action, target_label=None):
+    full_query = f"in:inbox {query}"
+    print(f"🔍 Buscando: [{full_query}]")
+    
+    response = service.users().messages().list(userId='me', q=full_query).execute()
+    messages = response.get('messages', [])
+    
+    if not messages:
+        return
+
+    msg_ids = [msg['id'] for msg in messages]
+
+    if action == 'trash':
+        service.users().messages().batchDelete(userId='me', body={'ids': msg_ids}).execute()
+        print(f"   ↳ 🗑️ {len(msg_ids)} mensajes enviados a la papelera.")
+    
+    elif action == 'label' and target_label:
+        label_id = get_or_create_label(service, target_label)
+        service.users().messages().batchModify(
+            userId='me',
+            body={'ids': msg_ids, 'addLabelIds': [label_id], 'removeLabelIds': ['INBOX']}
+        ).execute()
+        print(f"   ↳ ✨ {len(msg_ids)} mensajes etiquetados como '{target_label}' y archivados.")
+
 def clean_inbox():
     print("🚀 Conectando a Gmail...")
     service = get_gmail_service()
     
-    # 1. Vamos a listar los primeros 10 mensajes actuales del Inbox para probar la conexión real
-    print("\n--- DIAGNÓSTICO DEL INBOX ---")
-    results = service.users().messages().list(userId='me', q="in:inbox", maxResults=10).execute()
-    messages = results.get('messages', [])
-    
-    if not messages:
-        print("⚠️ El script no encontró ningún mensaje en el Inbox.")
-    else:
-        print(f"✅ Se leyeron {len(messages)} mensajes del Inbox correctamente.")
-        for msg in messages:
-            msg_detail = service.users().messages().get(userId='me', id=msg['id'], format='metadata', metadataHeaders=['Subject', 'From']).execute()
-            headers = msg_detail.get('payload', {}).get('headers', [])
-            subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'Sin asunto')
-            sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Desconocido')
-            print(f"   - De: {sender} | Asunto: {subject}")
-
-    print("\n--- APLICANDO REGLAS ---")
-    
-    # Reglas simplificadas para probar etiquetas directas
     rules = [
-        {"query": "BBVA", "label": "Finanzas"},
-        {"query": "Wise", "label": "Finanzas"},
-        {"query": "Mazda", "label": "Finanzas"},
-        {"query": "Espresso Matutino", "label": "Lectura"},
-        {"query": "Factor75", "label": "Compras"},
-        {"query": "Aeroméxico", "label": "Viajes"}
+        # 1. Limpieza de basura y promos antiguas
+        {"query": "category:promotions older_than:30d", "action": "trash"},
+        {"query": "from:flights older_than:10d", "action": "trash"},
+        {"query": 'subject:(OTP OR "código de verificación" OR verification) older_than:3d', "action": "trash"},
+        
+        # 2. FINANZAS (Estrictamente transaccional, excluyendo promociones)
+        {"query": "BBVA (statement OR estado OR pago OR transferencia OR cuenta OR corte OR compra OR cargo) -jingle -terror -promocion", "action": "label", "label": "Finanzas"},
+        {"query": "Wise (transfer OR sent OR payment OR account OR password)", "action": "label", "label": "Finanzas"},
+        {"query": "Mazda Financial (payment OR statement OR reminder OR due)", "action": "label", "label": "Finanzas"},
+        {"query": "Chase (statement OR alert OR zelle OR transfer OR payment)", "action": "label", "label": "Finanzas"},
+        {"query": "Fidelity Investments (statement OR confirmation OR transfer OR bill pay)", "action": "label", "label": "Finanzas"},
+        {"query": "statement", "action": "label", "label": "Finanzas"},
+        {"query": "financiamiento", "action": "label", "label": "Finanzas"},
+        
+        # 3. LECTURA
+        {"query": "Espresso Matutino", "action": "label", "label": "Lectura"},
+        {"query": "Service95", "action": "label", "label": "Lectura"},
+        {"query": "newsletter", "action": "label", "label": "Lectura"},
+        
+        # 4. VIAJES
+        {"query": "Aeroméxico (reservación OR vuelo OR boarding OR ticket) -promocion", "action": "label", "label": "Viajes"},
+        {"query": "SpotHero", "action": "label", "label": "Viajes"},
+        
+        # 5. COMPRAS
+        {"query": "Factor75", "action": "label", "label": "Compras"},
+        {"query": "Amazon", "action": "label", "label": "Compras"},
+        {"query": "MercadoLibre", "action": "label", "label": "Compras"},
+        
+        # 6. EVENTOS
+        {"query": "ticketmaster", "action": "label", "label": "Eventos"}
     ]
 
     for rule in rules:
-        q = f"in:inbox {rule['query']}"
-        print(f"Buscando: [{q}]")
-        res = service.users().messages().list(userId='me', q=q).execute()
-        msgs = res.get('messages', [])
-        
-        if msgs:
-            msg_ids = [m['id'] for m in msgs]
-            print(f" -> ¡Encontrados {len(msg_ids)} mensajes para '{rule['query']}'!")
-            try:
-                label_id = get_or_create_label(service, rule['label'])
-                service.users().messages().batchModify(
-                    userId='me',
-                    body={'ids': msg_ids, 'addLabelIds': [label_id], 'removeLabelIds': ['INBOX']}
-                ).execute( )
-                print(f" -> ✨ ¡Movidos exitosamente a '{rule['label']}'!")
-            except Exception as e:
-                print(f" ❌ ERROR al modificar mensajes (¿Faltan permisos de escritura en el token?): {e}")
-        else:
-            print(" -> Sin coincidencias.")
+        try:
+            if rule["action"] == "trash":
+                process_query(service, rule["query"], "trash")
+            elif rule["action"] == "label":
+                process_query(service, rule["query"], "label", rule["label"])
+        except Exception as e:
+            print(f"❌ Error en regla: {e}")
 
 if __name__ == '__main__':
     clean_inbox()
