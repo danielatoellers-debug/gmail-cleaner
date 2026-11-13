@@ -62,16 +62,19 @@ def process_query(service, query, action, target_label=None):
 def clean_inbox():
     service = get_gmail_service()
     
-    # Definimos tus reglas de limpieza y organización personalizadas:
+    # Reglas completas de limpieza y organización automática:
     rules = [
         # 1. Borrar promociones de más de 30 días
         {"query": "category:promotions older_than:30d", "action": "trash"},
         
-        # 2. Borrar códigos OTP y de verificación viejos (más de 3 días para evitar que fallen si los buscas recién llegado)
+        # 2. Borrar códigos OTP y de verificación viejos (más de 3 días)
         {"query": 'subject:(OTP OR "código de verificación" OR "verification code" OR "two-factor" OR "autenticación") older_than:3d', "action": "trash"},
         
         # 3. Organizar correos de bancos/finanzas en una carpeta "Finanzas"
-        {"query": 'from:(banco OR bbva OR chase OR citibanamex OR santander OR amex OR paypal OR stripe OR fidelity) -category:promotions', "action": "label", "label": "Finanzas"}
+        {"query": 'from:(banco OR bbva OR chase OR citibanamex OR santander OR amex OR paypal OR stripe OR fidelity) -category:promotions', "action": "label", "label": "Finanzas"},
+        
+        # 4. Organizar boletines/newsletters en una carpeta "Lectura"
+        {"query": 'subject:(newsletter OR boletín OR digest OR weekly OR monthly) -category:promotions', "action": "label", "label": "Lectura"}
     ]
 
     for rule in rules:
